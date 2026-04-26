@@ -47,17 +47,6 @@ avatar_service = None
 
 def get_services():
     """Lazy initialization of services"""
-    # global gemini_service, tts_service, avatar_service
-    # if gemini_service is None:
-    #     from services.ai_service import GeminiService
-    #     from services.tts_service import TTSService
-    #     from services.avatar_service import AvatarService
-        
-    #     gemini_service = GeminiService()
-    #     tts_service = TTSService()
-    #     avatar_service = AvatarService()
-    
-    # return gemini_service, tts_service, avatar_service
     global groq_service, tts_service, avatar_service
     if groq_service is None:
         from services.ai_service import GroqService
