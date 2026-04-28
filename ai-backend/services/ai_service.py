@@ -93,7 +93,13 @@ class GroqService:
             history = self.get_or_create_history(session_id)
 
             # Step 2: Retrieve relevant context from knowledge base
-            chunks = self.retriever.retrieve(user_message)
+            # Run in executor because retrieve() is synchronous and blocking
+            # This prevents the server from freezing while searching Pinecone
+            loop = asyncio.get_event_loop()
+            chunks = await loop.run_in_executor(
+                None,
+                lambda: self.retriever.retrieve(user_message)
+            )
             context = self.retriever.format_context(chunks)
 
             # Step 3: Build emotion and context aware message
