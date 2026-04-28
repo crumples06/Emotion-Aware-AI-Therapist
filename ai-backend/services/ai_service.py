@@ -1,8 +1,12 @@
 import os
+import sys
 import asyncio
 import logging
 from dotenv import load_dotenv
 from groq import Groq
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from rag.retriever import Retriever
 
 # Load .env variables
 load_dotenv()
@@ -41,12 +45,15 @@ class GroqService:
     """
     Groq-powered AI service for therapy responses
     """
-    
+
     def __init__(self):
-        # A dictionary that maps session_id -> that session's history
         self.sessions = {}
         self.model_name = "llama-3.1-8b-instant"
-        self.max_messages = 20 # how many messages to remember per session
+        self.max_messages = 20
+
+        print("Initializing RAG retriever...")
+        self.retriever = Retriever()
+        print("RAG retriever ready.")
 
     def get_or_create_history(self, session_id: str) -> list:
         # If this session doesnt exist yet, create it
@@ -82,18 +89,30 @@ class GroqService:
             session_id: str = "default"
     ) -> str:
         try:
+            # Step 1: Get this user's history
             history = self.get_or_create_history(session_id)
 
-            if emotion and emotion != "neutral":
-                enriched_message = f"[The user appears to be feeling {emotion} based on their facial expression.] {user_message}"
-            else:
-                enriched_message = user_message
+            # Step 2: Retrieve relevant context from knowledge base
+            chunks = self.retriever.retrieve(user_message)
+            context = self.retriever.format_context(chunks)
 
+            # Step 3: Build emotion and context aware message
+            enriched_message = user_message
+
+            if emotion and emotion != "neutral":
+                enriched_message = f"[The user appears to be feeling {emotion}.] {enriched_message}"
+
+            if context:
+                enriched_message = f"{context}\n\nUser message: {enriched_message}"
+
+            # Step 4: Add to history
             history.append({"role": "user", "content": enriched_message})
 
+            # Step 5: Trim history
             history = self.trim_history(history)
             self.sessions[session_id] = history
 
+            # Step 6: Call Groq
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
@@ -104,8 +123,11 @@ class GroqService:
                     temperature=0.7
                 )
             )
+
+            # Step 7: Extract response
             bot_message = response.choices[0].message.content
 
+            # Step 8: Save to history
             self.sessions[session_id].append(
                 {"role": "assistant", "content": bot_message}
             )
@@ -113,8 +135,6 @@ class GroqService:
             return bot_message.strip()
 
         except Exception as e:
-            import traceback
-            traceback.print_exc()
             return f"I'm having trouble responding right now. Please try again. (Error: {str(e)})"
 
     def clear_session(self, session_id: str):
